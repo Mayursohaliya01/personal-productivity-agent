@@ -67,10 +67,10 @@ st.subheader("📝 Your Tasks")
 for i, task in enumerate(tasks):
 
     done = st.checkbox(
-        f"{task['task']} ({task.get('category','General')})",
-        value=task["done"]
-    )
-
+    f"{task['task']} ({task.get('category','General')})",
+    value=task["done"],
+    key=f"task_{i}"
+)
     tasks[i]["done"] = done
 
 # Save Updated Tasks
