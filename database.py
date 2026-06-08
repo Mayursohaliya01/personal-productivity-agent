@@ -18,6 +18,14 @@ def create_database():
     )
     """)
 
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS eod_summaries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        summary TEXT,
+        created_date TEXT
+    )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -115,3 +123,36 @@ def get_task_statistics():
     conn.close()
 
     return total, completed, pending
+
+
+def save_eod_summary(summary, created_date):
+
+    conn = sqlite3.connect("productivity.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    INSERT INTO eod_summaries
+    (summary, created_date)
+    VALUES (?, ?)
+    """, (summary, created_date))
+
+    conn.commit()
+    conn.close()
+
+
+def get_eod_summaries():
+
+    conn = sqlite3.connect("productivity.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    SELECT *
+    FROM eod_summaries
+    ORDER BY id DESC
+    """)
+
+    summaries = cursor.fetchall()
+
+    conn.close()
+
+    return summaries

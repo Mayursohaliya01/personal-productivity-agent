@@ -1,4 +1,7 @@
 import streamlit as st
+from groq import Groq
+from datetime import date
+
 from database import (
     create_database,
     add_task,
@@ -6,7 +9,9 @@ from database import (
     complete_task,
     get_overdue_tasks,
     delete_all_tasks,
-    get_task_statistics
+    get_task_statistics,
+    save_eod_summary,
+    get_eod_summaries
 )
 
 create_database()
@@ -19,6 +24,10 @@ st.set_page_config(
 
 st.title("📋 Personal Productivity Agent")
 st.caption("AI-Powered Daily Task Management System")
+
+client = Groq(
+    api_key=st.secrets["GROQ_API_KEY"]
+)
 
 # Morning Check-In
 
@@ -137,36 +146,95 @@ st.subheader("🤖 Run My EOD")
 
 if st.button("Generate EOD Summary"):
 
-    summary = f"""
-📋 Daily Productivity Report
+    with st.spinner("Generating AI Summary..."):
 
-Total Tasks: {len(tasks)}
-Completed Tasks: {completed_count}
-Pending Tasks: {pending_count}
+        prompt = f"""
+        Create a professional End Of Day productivity summary.
 
-Focus on pending tasks tomorrow and complete high priority items first.
-"""
+        Total Tasks: {len(tasks)}
+        Completed Tasks: {completed_count}
+        Pending Tasks: {pending_count}
 
-    st.success(summary)
+        Mention:
+        - Today's productivity
+        - Completed work
+        - Pending work
+        - Suggestions for tomorrow
+
+        Keep the summary under 120 words.
+        """
+
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        )
+
+        summary = response.choices[0].message.content
+
+save_eod_summary(
+    summary,
+    str(date.today())
+)
+
+st.success(summary)
+
+# Tomorrow Plan
 
 # Tomorrow Plan
 
 st.divider()
 
-st.subheader("📅 Tomorrow Plan")
+st.subheader("📅 AI Tomorrow Planner")
 
-pending_found = False
+if st.button("Generate Tomorrow Plan"):
 
-for task in tasks:
+    pending_tasks = []
 
-    if task[6] == 0:
+    for task in tasks:
 
-        pending_found = True
-        st.write(f"➡️ {task[1]}")
+        if task[6] == 0:
+            pending_tasks.append(task[1])
 
-if not pending_found:
+    if len(pending_tasks) == 0:
 
-    st.success("All tasks completed. Great job!")
+        st.success("All tasks completed. No plan needed for tomorrow 🎉")
+
+    else:
+
+        task_text = ", ".join(pending_tasks)
+
+        prompt = f"""
+        Create a productivity plan for tomorrow.
+
+        Pending Tasks:
+        {task_text}
+
+        Give:
+        1. Task priorities
+        2. Suggested order of work
+        3. Short motivational advice
+
+        Keep it under 150 words.
+        """
+
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        )
+
+        tomorrow_plan = response.choices[0].message.content
+
+        st.success(tomorrow_plan)
 
 # Weekly Review
 
@@ -192,6 +260,24 @@ elif completion_rate >= 50:
     st.info("Good Progress 👍")
 else:
     st.warning("Try Completing More Tasks Next Week 💪")
+st.divider()
+
+st.subheader("📚 Previous EOD Summaries")
+
+summaries = get_eod_summaries()
+
+if len(summaries) == 0:
+
+    st.info("No summaries generated yet.")
+
+else:
+
+    for summary in summaries:
+
+        st.write(f"📅 {summary[2]}")
+        st.write(summary[1])
+
+        st.divider()
 
 # Clear Tasks
 
