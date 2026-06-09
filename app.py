@@ -21,6 +21,16 @@ st.set_page_config(
     page_icon="📋",
     layout="wide"
 )
+st.sidebar.title("📊 Dashboard")
+
+st.sidebar.info("""
+Personal Productivity Agent
+
+✅ Task Management
+✅ AI EOD Summary
+✅ Tomorrow Planner
+✅ Weekly Review
+""")
 
 st.title("📋 Personal Productivity Agent")
 st.caption("AI-Powered Daily Task Management System")
@@ -176,12 +186,12 @@ if st.button("Generate EOD Summary"):
 
         summary = response.choices[0].message.content
 
-save_eod_summary(
-    summary,
-    str(date.today())
-)
+        save_eod_summary(
+            summary,
+            str(date.today())
+        )
 
-st.success(summary)
+        st.success(summary)
 
 # Tomorrow Plan
 
