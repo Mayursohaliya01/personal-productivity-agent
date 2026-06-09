@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 from groq import Groq
 from datetime import date
 
@@ -7,11 +8,15 @@ from database import (
     add_task,
     get_tasks,
     complete_task,
+    delete_task,
     get_overdue_tasks,
     delete_all_tasks,
     get_task_statistics,
     save_eod_summary,
-    get_eod_summaries
+    get_eod_summaries,
+    create_user,
+    login_user,
+    get_user_id
 )
 
 create_database()
@@ -21,6 +26,67 @@ st.set_page_config(
     page_icon="📋",
     layout="wide"
 )
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+    
+if not st.session_state.logged_in:
+
+    st.title("🔐 Login / Signup")
+
+    menu = st.selectbox(
+        "Select",
+        ["Login", "Signup"]
+    )
+
+    username = st.text_input("Username")
+    password = st.text_input(
+        "Password",
+        type="password"
+    )
+
+    if menu == "Signup":
+
+        if st.button("Create Account"):
+
+            try:
+
+                create_user(
+                    username,
+                    password
+                )
+
+                st.success(
+                    "Account Created Successfully"
+                )
+
+            except:
+
+                st.error(
+                    "Username Already Exists"
+                )
+
+    else:
+
+        if st.button("Login"):
+
+            user = login_user(
+                username,
+                password
+            )
+
+            if user:
+
+                st.session_state.logged_in = True
+                st.session_state.username = username
+                st.rerun()
+
+            else:
+
+                st.error(
+                    "Invalid Username or Password"
+                )
+
+    st.stop()
 st.sidebar.title("📊 Dashboard")
 
 st.sidebar.info("""
@@ -31,6 +97,19 @@ Personal Productivity Agent
 ✅ Tomorrow Planner
 ✅ Weekly Review
 """)
+
+if st.sidebar.button("Logout"):
+
+    st.session_state.clear()
+    st.rerun()
+
+st.sidebar.divider()
+
+total, completed, pending = get_task_statistics()
+
+st.sidebar.metric("Total Tasks", total)
+st.sidebar.metric("Completed", completed)
+st.sidebar.metric("Pending", pending)
 
 st.title("📋 Personal Productivity Agent")
 st.caption("AI-Powered Daily Task Management System")
@@ -63,12 +142,17 @@ if st.button("💾 Save Task"):
 
     if task_name.strip() != "":
 
+        user_id = get_user_id(
+            st.session_state.username
+        )
+
         add_task(
             task_name,
             description,
             category,
             priority,
-            str(due_date)
+            str(due_date),
+            user_id
         )
 
         st.success("Task Saved Successfully")
@@ -101,30 +185,68 @@ st.divider()
 st.subheader("📋 Today's Tasks")
 
 tasks = get_tasks()
+st.subheader("🔍 Search & Filter")
+
+search_task = st.text_input("Search Task")
+
+filter_category = st.selectbox(
+    "Filter Category",
+    ["All", "Work", "Personal", "Health", "Learning"]
+)
 
 completed_count = 0
 pending_count = 0
 
+filtered_tasks = []
+
 for task in tasks:
 
+    if (
+        search_task.lower() in task[1].lower()
+        and
+        (
+            filter_category == "All"
+            or task[3] == filter_category
+        )
+    ):
+        filtered_tasks.append(task)
+
+for task in filtered_tasks:
     st.markdown(f"### 📌 {task[1]}")
 
     st.write(f"📝 Description: {task[2]}")
     st.write(f"📂 Category: {task[3]}")
-    st.write(f"🔥 Priority: {task[4]}")
+
+    if task[4] == "High":
+        st.error(f"🔥 Priority: {task[4]}")
+
+    elif task[4] == "Medium":
+        st.warning(f"⚡ Priority: {task[4]}")
+
+    else:
+        st.success(f"✅ Priority: {task[4]}")
+
     st.write(f"📅 Due Date: {task[5]}")
 
     if task[6] == 0:
 
         pending_count += 1
 
-        if st.button(
-            f"✅ Mark Complete ({task[0]})",
-            key=f"complete_{task[0]}"
-        ):
+    if st.button(
+        f"✅ Mark Complete ({task[0]})",
+        key=f"complete_{task[0]}"
+    ):
 
-            complete_task(task[0])
-            st.rerun()
+        complete_task(task[0])
+        st.rerun()
+
+    if st.button(
+        f"🗑 Delete ({task[0]})",
+        key=f"delete_{task[0]}"
+    ):
+
+        delete_task(task[0])
+        st.rerun()
 
     else:
 
@@ -247,7 +369,47 @@ if st.button("Generate Tomorrow Plan"):
         st.success(tomorrow_plan)
 
 # Weekly Review
+st.divider()
 
+st.subheader("📌 Priority Analytics")
+
+high_count = 0
+medium_count = 0
+low_count = 0
+
+for task in tasks:
+
+    if task[4] == "High":
+        high_count += 1
+
+    elif task[4] == "Medium":
+        medium_count += 1
+
+    elif task[4] == "Low":
+        low_count += 1
+        col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.metric("🔴 High Priority", high_count)
+
+with col2:
+    st.metric("🟡 Medium Priority", medium_count)
+
+with col3:
+    st.metric("🟢 Low Priority", low_count)
+st.divider()
+st.subheader("📅 Upcoming Tasks")
+
+upcoming = 0
+
+for task in tasks:
+    if task[6] == 0:
+        upcoming += 1
+
+st.metric(
+    "Pending Upcoming Tasks",
+    upcoming
+)
 st.divider()
 
 st.subheader("📈 Weekly Review")
@@ -259,10 +421,19 @@ completion_rate = 0
 if total > 0:
     completion_rate = round((completed / total) * 100)
 
+productivity_score = completion_rate
+
 st.write(f"Total Tasks Created: {total}")
 st.write(f"Completed Tasks: {completed}")
 st.write(f"Pending Tasks: {pending}")
 st.write(f"Completion Rate: {completion_rate}%")
+
+st.progress(productivity_score / 100)
+
+st.metric(
+    "Productivity Score",
+    f"{productivity_score}%"
+)
 
 if completion_rate >= 80:
     st.success("Excellent Productivity This Week 🚀")
@@ -288,6 +459,70 @@ else:
         st.write(summary[1])
 
         st.divider()
+st.divider()
+
+st.subheader("📑 AI Weekly Report")
+
+if st.button("Generate Weekly Report"):
+
+    prompt = f"""
+    Create a professional weekly productivity report.
+
+    Total Tasks: {total}
+    Completed Tasks: {completed}
+    Pending Tasks: {pending}
+    Completion Rate: {completion_rate}%
+
+    Keep under 200 words.
+    """
+
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
+    )
+
+    report = response.choices[0].message.content
+
+    st.success(report)
+st.divider()
+
+st.subheader("🧠 AI Productivity Insights")
+
+if st.button("Generate AI Insights"):
+
+    prompt = f"""
+    Analyze this productivity data.
+
+    Total Tasks: {total}
+    Completed Tasks: {completed}
+    Pending Tasks: {pending}
+
+    Give:
+    1. Productivity Analysis
+    2. Biggest Weakness
+    3. Improvement Advice
+
+    Keep under 150 words.
+    """
+
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
+    )
+
+    insight = response.choices[0].message.content
+
+    st.info(insight)
 
 # Clear Tasks
 
@@ -297,6 +532,34 @@ if st.button("🗑️ Clear All Tasks"):
 
     delete_all_tasks()
     st.rerun()
+
+st.divider()
+
+st.subheader("📤 Export Tasks")
+
+if st.button("Export CSV"):
+
+    df = pd.DataFrame(
+        tasks,
+        columns=[
+            "ID",
+            "Task",
+            "Description",
+            "Category",
+            "Priority",
+            "Due Date",
+            "Completed"
+        ]
+    )
+
+    csv = df.to_csv(index=False)
+
+    st.download_button(
+        "Download CSV",
+        csv,
+        "tasks_report.csv",
+        "text/csv"
+    )
 
 # Footer
 

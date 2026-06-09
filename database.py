@@ -1,4 +1,5 @@
 import sqlite3
+import hashlib
 from datetime import date
 
 def create_database():
@@ -14,7 +15,8 @@ def create_database():
         category TEXT,
         priority TEXT,
         due_date TEXT,
-        completed INTEGER DEFAULT 0
+        completed INTEGER DEFAULT 0,
+        user_id INTEGER
     )
     """)
 
@@ -25,21 +27,35 @@ def create_database():
         created_date TEXT
     )
     """)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE,
+    password TEXT
+    )
+    """)
 
     conn.commit()
     conn.close()
 
 
-def add_task(task_name, description, category, priority, due_date):
+def add_task(
+    task_name,
+    description,
+    category,
+    priority,
+    due_date,
+    user_id
+):
 
     conn = sqlite3.connect("productivity.db")
     cursor = conn.cursor()
 
     cursor.execute("""
     INSERT INTO tasks
-    (task_name, description, category, priority, due_date)
-    VALUES (?, ?, ?, ?, ?)
-    """, (task_name, description, category, priority, due_date))
+    (task_name, description, category, priority, due_date, user_id)
+    VALUES (?, ?, ?, ?, ?, ?)
+    """, (task_name, description, category, priority, due_date, user_id))
 
     conn.commit()
     conn.close()
@@ -142,6 +158,7 @@ def save_eod_summary(summary, created_date):
 
 def get_eod_summaries():
 
+    
     conn = sqlite3.connect("productivity.db")
     cursor = conn.cursor()
 
@@ -152,7 +169,78 @@ def get_eod_summaries():
     """)
 
     summaries = cursor.fetchall()
-
     conn.close()
 
     return summaries
+def delete_task(task_id):
+
+    conn = sqlite3.connect("productivity.db")
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "DELETE FROM tasks WHERE id=?",
+        (task_id,)
+    )
+
+    conn.commit()
+    conn.close()
+
+def create_user(username, password):
+
+    conn = sqlite3.connect("productivity.db")
+    cursor = conn.cursor()
+
+    password = hashlib.sha256(
+    password.encode()
+    ).hexdigest()
+    cursor.execute(
+        """
+        INSERT INTO users
+        (username, password)
+        VALUES (?, ?)
+        """,
+        (username, password)
+    )
+
+    conn.commit()
+    conn.close()
+
+def get_user_id(username):
+
+    conn = sqlite3.connect("productivity.db")
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT id FROM users WHERE username=?",
+        (username,)
+    )
+
+    user = cursor.fetchone()
+
+    conn.close()
+
+    return user[0]
+
+def login_user(username, password):
+
+    conn = sqlite3.connect("productivity.db")
+    cursor = conn.cursor()
+
+    password = hashlib.sha256(
+    password.encode()
+    ).hexdigest()
+    
+    cursor.execute(
+        """
+        SELECT *
+        FROM users
+        WHERE username=? AND password=?
+        """,
+        (username, password)
+    )
+
+    user = cursor.fetchone()
+
+    conn.close()
+
+    return user
